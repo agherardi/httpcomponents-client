@@ -26,12 +26,6 @@
  */
 package org.apache.hc.client5.http.impl.auth;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.Serializable;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -44,8 +38,6 @@ import org.apache.hc.core5.annotation.Contract;
 import org.apache.hc.core5.annotation.ThreadingBehavior;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.util.Args;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 /**
  * Default implementation of {@link AuthCache}. This implements
@@ -60,9 +52,7 @@ import org.apache.logging.log4j.Logger;
 @Contract(threading = ThreadingBehavior.SAFE_CONDITIONAL)
 public class BasicAuthCache implements AuthCache {
 
-    private final Logger log = LogManager.getLogger(getClass());
-
-    private final Map<HttpHost, byte[]> map;
+    private final Map<HttpHost, AuthScheme> map;
     private final SchemePortResolver schemePortResolver;
 
     /**
@@ -100,48 +90,13 @@ public class BasicAuthCache implements AuthCache {
         if (authScheme == null) {
             return;
         }
-        if (authScheme instanceof Serializable) {
-            try {
-                final ByteArrayOutputStream buf = new ByteArrayOutputStream();
-                try (final ObjectOutputStream out = new ObjectOutputStream(buf)) {
-                    out.writeObject(authScheme);
-                }
-                this.map.put(getKey(host), buf.toByteArray());
-            } catch (final IOException ex) {
-                if (log.isWarnEnabled()) {
-                    log.warn("Unexpected I/O error while serializing auth scheme", ex);
-                }
-            }
-        } else {
-            if (log.isDebugEnabled()) {
-                log.debug("Auth scheme " + authScheme.getClass() + " is not serializable");
-            }
-        }
+        this.map.put(getKey(host), authScheme);
     }
 
     @Override
     public AuthScheme get(final HttpHost host) {
         Args.notNull(host, "HTTP host");
-        final byte[] bytes = this.map.get(getKey(host));
-        if (bytes != null) {
-            try {
-                final ByteArrayInputStream buf = new ByteArrayInputStream(bytes);
-                try (final ObjectInputStream in = new ObjectInputStream(buf)) {
-                    return (AuthScheme) in.readObject();
-                }
-            } catch (final IOException ex) {
-                if (log.isWarnEnabled()) {
-                    log.warn("Unexpected I/O error while de-serializing auth scheme", ex);
-                }
-                return null;
-            } catch (final ClassNotFoundException ex) {
-                if (log.isWarnEnabled()) {
-                    log.warn("Unexpected error while de-serializing auth scheme", ex);
-                }
-                return null;
-            }
-        }
-        return null;
+        return this.map.get(getKey(host));
     }
 
     @Override
