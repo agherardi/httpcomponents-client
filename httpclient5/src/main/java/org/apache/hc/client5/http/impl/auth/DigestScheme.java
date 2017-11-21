@@ -36,13 +36,13 @@ import java.security.Principal;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Formatter;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hc.client5.http.auth.AuthChallenge;
@@ -54,7 +54,6 @@ import org.apache.hc.client5.http.auth.Credentials;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
 import org.apache.hc.client5.http.auth.MalformedChallengeException;
 import org.apache.hc.client5.http.auth.util.ByteArrayBuilder;
-import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.HttpHost;
@@ -103,12 +102,16 @@ public class DigestScheme implements AuthScheme, Serializable {
 
     private final Map<String, String> paramMap;
     private boolean complete;
-    private final AtomicLong atomicNonceCount = new AtomicLong(0);
+    private final AtomicLong atomicNonceCount;
     private final String cnonce;
 
+    private String username;
+    private char[] password;
+
     public DigestScheme() {
-        this.paramMap = new HashMap<>();
+        this.paramMap = new ConcurrentHashMap<>();
         this.complete = false;
+        this.atomicNonceCount = new AtomicLong(0);
         this.cnonce = formatHex(createCnonce());
     }
 
@@ -163,8 +166,12 @@ public class DigestScheme implements AuthScheme, Serializable {
         final Credentials credentials = credentialsProvider.getCredentials(
                 new AuthScope(host, getRealm(), getName()), context);
         if (credentials != null) {
+            this.username = credentials.getUserPrincipal().getName();
+            this.password = credentials.getPassword();
             return true;
         }
+        this.username = null;
+        this.password = null;
         return false;
     }
 
@@ -186,10 +193,7 @@ public class DigestScheme implements AuthScheme, Serializable {
         if (this.paramMap.get("nonce") == null) {
             throw new AuthenticationException("missing nonce");
         }
-        final HttpClientContext clientContext = HttpClientContext.adapt(context);
-        final Credentials credentials = clientContext.getCredentialsProvider().getCredentials(
-                new AuthScope(host, getRealm(), getName()), context);
-        return createDigestResponse(request, credentials);
+        return createDigestResponse(request);
     }
 
     private static MessageDigest createMessageDigest(
@@ -203,7 +207,7 @@ public class DigestScheme implements AuthScheme, Serializable {
         }
     }
 
-    private String createDigestResponse(final HttpRequest request, final Credentials credentials) throws AuthenticationException {
+    private String createDigestResponse(final HttpRequest request) throws AuthenticationException {
 
         final String uri = request.getPath();
         final String method = request.getMethod();
@@ -274,8 +278,6 @@ public class DigestScheme implements AuthScheme, Serializable {
 
         byte[] a1 = null;
         byte[] a2 = null;
-        final String username = credentials.getUserPrincipal().getName();
-        final char[] password = credentials.getPassword();
         // 3.2.2.2: Calculating digest
         if (algorithm.equalsIgnoreCase("MD5-sess")) {
             // H( unq(username-value) ":" unq(realm-value) ":" passwd )
