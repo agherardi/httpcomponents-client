@@ -261,7 +261,7 @@ public class DigestScheme implements AuthScheme, Serializable {
             throw new AuthenticationException("Unsuppported digest algorithm: " + digAlg);
         }
 
-        long nounceCount = atomicNonceCount.incrementAndGet();
+        final long nounceCount = atomicNonceCount.incrementAndGet();
 
         final StringBuilder sb = new StringBuilder(8);
         try (final Formatter formatter = new Formatter(sb, Locale.US)) {
@@ -269,13 +269,13 @@ public class DigestScheme implements AuthScheme, Serializable {
         }
         final String nc = sb.toString();
 
-        ByteArrayBuilder byteBuffer = new ByteArrayBuilder(128);
+        final ByteArrayBuilder byteBuffer = new ByteArrayBuilder(128);
         byteBuffer.charset(charset);
 
         byte[] a1 = null;
         byte[] a2 = null;
-        String username = credentials.getUserPrincipal().getName();
-        char[] password = credentials.getPassword();
+        final String username = credentials.getUserPrincipal().getName();
+        final char[] password = credentials.getPassword();
         // 3.2.2.2: Calculating digest
         if (algorithm.equalsIgnoreCase("MD5-sess")) {
             // H( unq(username-value) ":" unq(realm-value) ":" passwd )
